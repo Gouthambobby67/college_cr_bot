@@ -3,11 +3,13 @@ from selenium.webdriver.support.ui import Select
 from selenium.webdriver.common.by import By
 import logging
 
+# --- NEW IMPORTS ---
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager
+
 # Set up a logger for this module
 logger = logging.getLogger(__name__)
-
-# Removed the unused 'results_checking' import
-# a=results_checking() 
 
 class result_bot:
     
@@ -19,12 +21,28 @@ class result_bot:
 
     def bot_work(self, all_data_collected):
         """
-        Starts the driver, gets the result link, and scrapes the list of departments.
+        Starts the driver IN HEADLESS MODE, gets the result link, 
+        and scrapes the list of departments.
         all_data_collected[0] = result link
         """
         try:
-            # Create and store the driver instance
-            self.driver = webdriver.Chrome()
+            # --- START OF MODIFICATIONS ---
+            
+            # 1. Set up Chrome Options
+            options = Options()
+            options.add_argument("--headless")
+            options.add_argument("--no-sandbox")
+            options.add_argument("--disable-dev-shm-usage")
+            options.add_argument("--window-size=1920,1080") # Set window size to avoid layout issues
+            
+            # 2. Set up the Service to auto-install the driver
+            service = Service(ChromeDriverManager().install())
+            
+            # 3. Create the driver with the new service and options
+            self.driver = webdriver.Chrome(service=service, options=options)
+            
+            # --- END OF MODIFICATIONS ---
+            
             self.driver.get(all_data_collected[0])
             self.driver.implicitly_wait(30)  # Wait for page to load
             
@@ -46,13 +64,16 @@ class result_bot:
                 self.driver = None
             return []  # Return empty list on failure
 
+    #
+    # --- NO CHANGES NEEDED to select_department() ---
+    #
     def select_department(self, all_data_collected):
         """
         Uses the active driver session to submit the form with all details.
         all_data_collected = [link, department_index, roll, dob]
         """
         
-        # Check if the driver session is active
+        # Check if the active driver session is active
         if self.driver is None:
             logger.error("No active driver session in select_department.")
             return "Error: Session expired. Please start over with /resultscheck."
@@ -116,8 +137,5 @@ class result_bot:
             if self.driver:
                 self.driver.quit()
                 self.driver = None
-
 if __name__ == "__main__":
     pass
-#for dept in valid:
-    #print(dept)
