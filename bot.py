@@ -1,6 +1,6 @@
 import logging
 from ExamTimeTable import results_checking, exam_timetable
-from resutbot import bot_work
+from resutbot import result_bot
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application,
@@ -13,22 +13,22 @@ from telegram.ext import (
 )
 
 # --- Configuration ---
-# FIX 1: Define your bot token here.
-# REPLACE "YOUR_BOT_TOKEN" with your actual token.
-TOKEN=""
-
+# FIX 1: Defined the bot token
+TOKEN = "YOUR_BOT_TOKEN"
 # --- Constants ---
 # States for ConversationHandler
 (
     GET_REGULATION,  # Waiting for user to select regulation (R18, R20, R23)
     GET_YEAR,        # Waiting for user to select year (1, 2, 3, 4)
     GET_SEM,         # Waiting for user to select semester (1, 2)
-    GET_OPTION,      # Waiting for user to select a result link option
+    GET_OPTION,
+    GET_DEPARTMENT,    # NEW STATE
+    CONFIRM_DEPARTMENT, # NEW STATE
     GET_ROLL,        # Waiting for user to type their roll number
     CONFIRM_ROLL,    # Waiting for user to confirm roll number (Yes/No)
     GET_DOB,         # Waiting for user to type their date of birth
     CONFIRM_DOB,     # Waiting for user to confirm date of birth (Yes/No)
-) = range(8)
+) = range(10)
 
 MAX_TIMETABLE_ENTRIES = 10
 
@@ -39,14 +39,15 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # --- Global Class Instance ---
-# Instantiate your helper class
 try:
     a = results_checking()
+    b = result_bot()
+    
 except Exception as e:
-    logger.critical(f"Failed to instantiate results_checking class: {e}")
-    # If this fails, the bot can't work.
-    # Consider exiting or handling this gracefully.
-    a = None 
+    logger.critical(f"Failed to instantiate helper classes: {e}", exc_info=True)
+    a = None
+    b = None
+# --- Bot Handlers ---
 
 
 # --- 1. Simple Command Handlers ---
@@ -82,7 +83,6 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     
     try:
         notice = exam_timetable(regulation)
-        # Show only the top entries
         msg = "\n\n".join(notice[:MAX_TIMETABLE_ENTRIES])
         if not msg:
              msg = "No timetable found for that regulation."
@@ -97,7 +97,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def resultscheck(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Starts the /resultscheck conversation."""
-    if a is None:
+    if a is None or b is None:
         await update.message.reply_text("Sorry, the bot is not configured correctly. Please contact the admin.")
         return ConversationHandler.END
         
@@ -179,18 +179,14 @@ async def get_sem(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     year = context.user_data['year']
     all_collected_data = [reg, year, sem]
     
-    # Get the list of result names/links
     link_options = a.get_results_link(all_collected_data)
     
-    # Store options list in context for the next step
     context.user_data["link_options"] = link_options
     
     keyboard = []
-    # Send the index (0, 1, 2...) as callback_data
     for index, option in enumerate(link_options):
-        keyboard.append([InlineKeyboardButton(option, callback_data=f"{index}")])
+        keyboard.append([InlineKeyboardButton(option[14:], callback_data=f"{index}")])
         
-    # Handle case where no links are found
     if not link_options:
         logger.warning(f"No link options found for {reg}-{year}-{sem}.")
         await query.edit_message_text(
@@ -218,21 +214,20 @@ async def get_sem(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
 async def get_option(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """
-    Stores the chosen option index, calls a.print_options to get the 
-    final link, and asks for Roll Number.
+    Stores the chosen option, calls a.print_options, 
+    and then asks for Department.
     """
     query = update.callback_query
     await query.answer()
     
+    link_from_print_options = None # Initialize variable
+    
     try:
-        # 1. Get the index string (e.g., "0", "1") from the button press
         option_index_str = query.data
-        option_index = int(option_index_str)  # This is the integer option
+        option_index = int(option_index_str)
         
-        # 2. Retrieve the list of options we saved in the previous step
         link_options = context.user_data.get("link_options")
         
-        # 3. Check if the list exists and the index is valid
         if not link_options:
             logger.error("User context is missing 'link_options'. Bot stuck.")
             await query.edit_message_text(
@@ -242,31 +237,31 @@ async def get_option(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
             return ConversationHandler.END
 
         if 0 <= option_index < len(link_options):
-            # 4. Get the *text* of the selected option (for display)
             selected_option_text = link_options[option_index]
             
             logger.info(f"User selected option index: {option_index}, text: {selected_option_text}")
             
-            # 6. Call a.print_options with the new data
             reg = context.user_data['regulation']
             year = context.user_data['year']
             sem = context.user_data['sem']
             
-            # [reg, year, sem, option] (option is integer)
             all_new_collected_data = [reg, year, sem, option_index]
             
             logger.info(f"Calling a.print_options with: {all_new_collected_data}")
             link_from_print_options = a.print_options(all_new_collected_data)
             
-            # 7. Store this new link for the final step
+            if link_from_print_options is None:
+                logger.error("a.print_options returned None. Cannot proceed.")
+                await query.edit_message_text(text="An error occurred while selecting the link. Please start over.")
+                context.user_data.clear()
+                return ConversationHandler.END
+                
             context.user_data['final_link'] = link_from_print_options
             logger.info(f"Storing 'final_link': {link_from_print_options}")
             
-            # 8. Edit the message to show the selection text
             await query.edit_message_text(text=f"You selected: {selected_option_text}")
         
         else:
-            # This should not happen, but a good safeguard
             logger.warning(f"Invalid option index: {option_index} for link_options of length {len(link_options)}")
             await query.edit_message_text(
                 text="An error occurred (invalid index). Please start over with /resultscheck."
@@ -275,7 +270,6 @@ async def get_option(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
             return ConversationHandler.END
 
     except Exception as e:
-        # Catch any other error (like ValueError if query.data isn't "0")
         logger.error(f"Error in get_option: {e}", exc_info=True)
         await query.edit_message_text(
             text="A critical error occurred. Please start over with /resultscheck."
@@ -283,13 +277,115 @@ async def get_option(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         context.user_data.clear()
         return ConversationHandler.END
         
-    # 7. If successful, send a *new* message asking for Roll Number
-    await context.bot.send_message(
-        chat_id=update.effective_chat.id,
-        text="Great. Now, please enter your Roll Number:"
+    # --- NEW STEP: Ask for Department ---
+    try:
+        # Pass the link to bot_work to get departments
+        all_new_collected_data = [link_from_print_options]
+        logger.info(f"Calling b.bot_work with: {all_new_collected_data}")
+        
+        # This call must be for getting the list
+        departments = b.bot_work(all_new_collected_data) 
+        
+        if not departments:
+            logger.error("b.bot_work() returned no departments.")
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text="Could not find any departments for this result link. Please contact the admin."
+            )
+            context.user_data.clear()
+            return ConversationHandler.END
+
+        keyboard = []
+        # Create a button for each department
+        # Using "dept_{index}" as callback data
+        for index, dept in enumerate(departments):
+             keyboard.append([InlineKeyboardButton(dept, callback_data=f"dept_{index}")])
+        
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text="Please select your department:",
+            reply_markup=reply_markup
+        )
+        return GET_DEPARTMENT
+
+    except Exception as e:
+        logger.error(f"Error calling b.bot_work(): {e}", exc_info=True)
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text="A critical error occurred while fetching departments. Please start over with /resultscheck."
+        )
+        context.user_data.clear()
+        return ConversationHandler.END
+
+async def get_department(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Stores the chosen department index and asks for confirmation."""
+    query = update.callback_query
+    await query.answer()
+    
+    # query.data will be "dept_0", "dept_1", etc.
+    department_index = query.data.split('_', 1)[1] 
+    context.user_data["department"] = int(department_index)
+    department=context.user_data["department"]
+    
+    keyboard = [
+        [
+            InlineKeyboardButton("Yes", callback_data="confirm_dept_ok"),
+            InlineKeyboardButton("No", callback_data="confirm_dept_no"),
+        ]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    # We can't show the department name easily, so we just show the index.
+    # A better way would be to store the departments list in user_data.
+    context.user_data["departments"] = departments = b.bot_work([context.user_data.get("final_link")])
+    department_name = departments[int(department_index)] if departments and 0 <= int(department_index) < len(departments) else "Unknown"  
+    context.user_data["department_name"] = department_name
+    await query.edit_message_text(
+        text=f"Department selected (department_name: {department_name}).\nIs this correct?",
+        reply_markup=reply_markup
     )
-    # 8. Move to the next state, which waits for text
-    return GET_ROLL
+    return CONFIRM_DEPARTMENT
+
+async def confirm_department(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Confirms Department (or asks again) and moves to ask for Roll Number."""
+    query = update.callback_query
+    await query.answer()
+    
+    if query.data == "confirm_dept_ok":
+        await query.edit_message_text(text=f"Department (department_name: {context.user_data['department_name']}) confirmed.")
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text="Great. Now, please enter your Roll Number:"
+        )
+        return GET_ROLL
+    else:
+        # Re-send department list
+        try:
+            # We need the link again to re-fetch departments
+            link = context.user_data.get("final_link")
+            if not link:
+                logger.error("User context missing 'final_link' in confirm_department.")
+                await query.edit_message_text(text="An error occurred (missing context). Please start over with /resultscheck.")
+                context.user_data.clear()
+                return ConversationHandler.END
+            
+            departments = b.bot_work([link]) # Re-call with link
+            keyboard = []
+            for index, dept in enumerate(departments):
+                 keyboard.append([InlineKeyboardButton(dept, callback_data=f"dept_{index}")])
+
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await query.edit_message_text(
+                text="Okay, please select your department again:",
+                reply_markup=reply_markup
+            )
+            return GET_DEPARTMENT
+        except Exception as e:
+            logger.error(f"Error re-fetching departments in confirm_department: {e}", exc_info=True)
+            await query.edit_message_text(text="An error occurred. Please start over with /resultscheck.")
+            context.user_data.clear()
+            return ConversationHandler.END
 
 async def get_roll(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Stores the roll number and asks for confirmation."""
@@ -355,11 +451,15 @@ async def confirm_dob(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
         
         # Get all the data collected and stored in context
         link = context.user_data.get("final_link")
+        # Get the new department data
+        department = context.user_data.get("department") # This is the index
         roll = context.user_data.get("roll")
         dob = context.user_data.get("dob")
         
         # Final data list to pass to the processing function
-        all_collected_data = [link, roll, dob]
+        all_collected_data = [link, department, roll, dob]
+        
+        logger.info(f"Final data collected: {all_collected_data}")
         
         await context.bot.send_message(
             chat_id=update.effective_chat.id,
@@ -370,8 +470,10 @@ async def confirm_dob(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
         )
         
         try:
-            # Final call to the bot_work function
-            results = bot_work(all_collected_data)
+            # Final call to b.select_department
+            logger.info(f"Calling b.select_department with: {all_collected_data}")
+            all_collected_data=[link, department, roll, dob]
+            results = b.select_department(all_collected_data)
             
             if isinstance(results, str) and results.endswith('.png'):
                 logger.info(f"Sending photo: {results}")
@@ -388,8 +490,7 @@ async def confirm_dob(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
                 )
                 
         except Exception as e:
-            # Corrected the error message to log the actual function called
-            logger.error(f"Error in bot_work function: {e}", exc_info=True)
+            logger.error(f"Error in b.select_department function: {e}", exc_info=True)
             await context.bot.send_message(
                 chat_id=update.effective_chat.id,
                 text="Sorry, an error occurred while processing your results."
@@ -416,16 +517,15 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 def main() -> None:
     """Run the bot."""
     
-    # Check if the token is set
     if TOKEN == "YOUR_BOT_TOKEN" or not TOKEN:
         logger.critical("="*50)
         logger.critical("ERROR: TOKEN is not set.")
         logger.critical("Please replace 'YOUR_BOT_TOKEN' with your actual bot token.")
         logger.critical("="*50)
-        return  # Stop the bot
+        return
     
-    if a is None:
-        logger.critical("results_checking() class failed to initialize. Bot cannot start.")
+    if a is None or b is None:
+        logger.critical("Helper classes failed to initialize. Bot cannot start.")
         return
 
     application = Application.builder().token(TOKEN).build()
@@ -437,7 +537,10 @@ def main() -> None:
             GET_REGULATION: [CallbackQueryHandler(get_regulation, pattern="^reg_")],
             GET_YEAR: [CallbackQueryHandler(get_year, pattern=r"^(1|2|3|4)$")],
             GET_SEM: [CallbackQueryHandler(get_sem, pattern=r"^(1|2)$")],
-            GET_OPTION: [CallbackQueryHandler(get_option, pattern=r"^\d+$")], # Matches any number
+            GET_OPTION: [CallbackQueryHandler(get_option, pattern=r"^\d+$")],
+            # FIX 4: Added new handlers for department
+            GET_DEPARTMENT: [CallbackQueryHandler(get_department, pattern="^dept_")],
+            CONFIRM_DEPARTMENT: [CallbackQueryHandler(confirm_department, pattern="^confirm_dept_")],
             GET_ROLL: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_roll)],
             CONFIRM_ROLL: [CallbackQueryHandler(confirm_roll, pattern="^roll_")],
             GET_DOB: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_dob)],
@@ -452,12 +555,11 @@ def main() -> None:
     application.add_handler(CommandHandler('start', start))
     application.add_handler(CommandHandler('examtimetable', examtimetable))
     
-    # This handler is for the /examtimetable buttons ONLY.
     application.add_handler(CallbackQueryHandler(button, pattern=r"^(R23|R20|R18)$"))
 
-    # Run the bot
     print("Bot is running... Press Ctrl-C to stop.")
     application.run_polling()
 
 if __name__ == "__main__":
     main()
+
