@@ -1,10 +1,7 @@
-from bs4 import BeautifulSoup
 from urllib.parse import quote, urljoin
 import requests
 from email.mime import text
 from bs4 import BeautifulSoup
-import requests
-from urllib.parse import urljoin
 def safe_url(u):
     if " " not in u:
         return u
@@ -34,44 +31,41 @@ def exam_timetable(regulation):
             b.append(downloadlink)
             n=n+1
     return b
-def results_checking():
-    html_text="http://125.16.54.154/mitsresults/resultug"
-    soup=BeautifulSoup(requests.get(html_text).text,'lxml')
-    table=soup.find('div',class_='wrapper')
-    table1=table.find_all('a')
-    data=[]
-    results_link=[]
-    new_text=[]
-    data1=[]
-    ROMAN = {
-        "I": 1,
-        "II": 2,
-        "III": 3,
-        "IV": 4,
-    }
-    regulation="R20"
-    year="3"
-    sem="2"
-    for index,x in enumerate(table1):
-        link=x["href"]
-        name=x.get_text(strip=True)      
-        full_link = urljoin(html_text, link)
-        data.append(name)
-        parts = name.split("-")        # ['B.Tech', 'IV', 'II', 'R20', 'Regular', 'May', '2024']
-        parts[1] = str(ROMAN[parts[1].upper()])   # IV  -> 4
-        parts[2] = str(ROMAN[parts[2].upper()])   # II  -> 2
-        text = "-".join(parts)
-        if regulation in text and year in text[7] and sem in text[9]:
-            new_text.append(text)
-            results_link.append(full_link)
-    for index,x in enumerate(new_text):
-        data1.append((f"{index}: {x}"))
-    print("\n".join(data1))
-    idx = int(input("Enter number: "))
-    choice = new_text[idx]
-    result_link = results_link[idx]
-    return result_link
-
-        
+class results_checking:
+    def get_results_link(self,all_data_collected):
+        html_text="http://125.16.54.154/mitsresults/resultug"
+        soup=BeautifulSoup(requests.get(html_text).text,'lxml')
+        table=soup.find('div',class_='wrapper')
+        table1=table.find_all('a')
+        data=[]
+        self.results_link=[]
+        self.new_text=[]
+        ROMAN = {
+            "I": 1,
+            "II": 2,
+            "III": 3,
+            "IV": 4,
+        }
+        for index,x in enumerate(table1):
+            link=x["href"]
+            name=x.get_text(strip=True)      
+            full_link = urljoin(html_text, link)
+            data.append(name)
+            parts = name.split("-")        # ['B.Tech', 'IV', 'II', 'R20', 'Regular', 'May', '2024']
+            parts[1] = str(ROMAN[parts[1].upper()])   # IV  -> 4
+            parts[2] = str(ROMAN[parts[2].upper()])   # II  -> 2
+            text = "-".join(parts)
+            if all_data_collected[0] in text and all_data_collected[1] in text[7] and all_data_collected[2] in text[9]:
+                self.new_text.append(text)
+                self.results_link.append(full_link)
+        return self.new_text
+    def print_options(self,all_data_collected):
+        data1=[]
+        for index,x in enumerate(self.new_text):
+            data1.append((f"{index}: {x}"))
+        #print("\n".join(data1))
+        #idx = int(input("Enter number: "))
+        result_link = self.results_link[all_data_collected[3]]
+        return result_link    
 if __name__=="__main__":
     pass
