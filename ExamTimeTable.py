@@ -74,4 +74,4 @@ def results_checking():
 
         
 if __name__=="__main__":
-    print(results_checking())
+    pass
