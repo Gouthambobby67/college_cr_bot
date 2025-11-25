@@ -12,10 +12,15 @@ from telegram.ext import (
     filters,
 )
 
+import os
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
+
 # --- Configuration ---
-# FIX 1: Defined the bot token
-TOKEN="TOKEN OF YOUR BOT"
-# --- Constants ---
+# Get token from environment variable, fallback to hardcoded (not recommended for production)
+TOKEN = "enter your token"
 # States for ConversationHandler
 (
     GET_REGULATION,  # Waiting for user to select regulation (R18, R20, R23)
@@ -83,15 +88,14 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     
     try:
         notice = exam_timetable(regulation)
-        msg = "\n".join(notice[:MAX_TIMETABLE_ENTRIES])
+        msg = "\n\n".join(notice[:MAX_TIMETABLE_ENTRIES])
         if not msg:
              msg = "No timetable found for that regulation."
     except Exception as e:
         logger.error(f"Error in exam_timetable function: {e}")
         msg = "Sorry, an error occurred while fetching the timetable."
-    for index, entry in enumerate(msg.split("\n")):
-        await query.message.reply_text(text=entry)
 
+    await query.edit_message_text(text=msg)
 
 
 # --- 2. ConversationHandler for /resultscheck ---
@@ -416,7 +420,7 @@ async def confirm_roll(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
         await query.edit_message_text(text=f"Roll number {context.user_data['roll']} confirmed.")
         await context.bot.send_message(
             chat_id=update.effective_chat.id,
-            text="Finally, please enter your Date of Birth (MM/DD/YYYY):"
+            text="Finally, please enter your Date of Birth (DD/MM/YYYY):"
         )
         return GET_DOB
     else:
@@ -426,6 +430,7 @@ async def confirm_roll(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
 async def get_dob(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Stores the Date of Birth and asks for confirmation."""
     dob = update.message.text.strip()
+    # Basic validation/conversion could happen here, but we'll do it before sending
     context.user_data["dob"] = dob
     
     keyboard = [
@@ -455,7 +460,29 @@ async def confirm_dob(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
         # Get the new department data
         department = context.user_data.get("department") # This is the index
         roll = context.user_data.get("roll")
-        dob = context.user_data.get("dob")
+        dob_input = context.user_data.get("dob")
+        
+        # Convert DOB to YYYY-MM-DD
+        try:
+            # Handle DD-MM-YYYY or DD/MM/YYYY
+            import datetime
+            dob_obj = None
+            for fmt in ("%d-%m-%Y", "%d/%m/%Y", "%Y-%m-%d"):
+                try:
+                    dob_obj = datetime.datetime.strptime(dob_input, fmt)
+                    break
+                except ValueError:
+                    continue
+            
+            if dob_obj:
+                dob = dob_obj.strftime("%Y-%m-%d")
+            else:
+                # Fallback to input if parsing fails
+                dob = dob_input
+                logger.warning(f"Could not parse DOB: {dob_input}")
+        except Exception as e:
+            logger.error(f"Error parsing DOB: {e}")
+            dob = dob_input
         
         # Final data list to pass to the processing function
         all_collected_data = [link, department, roll, dob]
@@ -487,7 +514,8 @@ async def confirm_dob(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
                 logger.info(f"Sending text result: {results}")
                 await context.bot.send_message(
                     chat_id=update.effective_chat.id,
-                    text=f"Here is your result link/data: {results}"
+                    text=f"{results}",
+                    parse_mode="Markdown"
                 )
                 
         except Exception as e:
@@ -501,7 +529,7 @@ async def confirm_dob(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
         return ConversationHandler.END
     
     else: 
-        await query.edit_message_text(text="Okay, please enter your Date of Birth again (MM/DD/YYYY):")
+        await query.edit_message_text(text="Okay, please enter your Date of Birth again (DD-MM-YYYY):")
         return GET_DOB
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
