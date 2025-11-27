@@ -20,7 +20,7 @@ load_dotenv()
 
 # --- Configuration ---
 # Get token from environment variable, fallback to hardcoded (not recommended for production)
-TOKEN = "enter your token"
+TOKEN="ENTER THE TOKEN"
 # States for ConversationHandler
 (
     GET_REGULATION,  # Waiting for user to select regulation (R18, R20, R23)
@@ -94,8 +94,11 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     except Exception as e:
         logger.error(f"Error in exam_timetable function: {e}")
         msg = "Sorry, an error occurred while fetching the timetable."
-
-    await query.edit_message_text(text=msg)
+    for index, entry in enumerate(msg.split("\n\n")):
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text=f"\n{entry}"
+        )
 
 
 # --- 2. ConversationHandler for /resultscheck ---
