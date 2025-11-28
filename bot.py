@@ -1,5 +1,5 @@
 import logging
-from ExamTimeTable import results_checking, exam_timetable
+from ExamTimeTable import results_checking, exam_timetable, notification_timetable
 from resutbot import result_bot
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -20,7 +20,7 @@ load_dotenv()
 
 # --- Configuration ---
 # Get token from environment variable, fallback to hardcoded (not recommended for production)
-TOKEN="ENTER THE TOKEN"
+TOKEN="ENTER YOUR TOKEN"
 # States for ConversationHandler
 (
     GET_REGULATION,  # Waiting for user to select regulation (R18, R20, R23)
@@ -63,7 +63,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         chat_id=update.effective_chat.id,
         text="Hi! I'm a bot. You can use:\n"
              "/examtimetable - To check exam timetables\n"
-             "/resultscheck - To get your results"
+             "/resultscheck - To get your results\n"
+             "/notification - To get exam notifications"
     )
 
 async def examtimetable(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -93,6 +94,40 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
              msg = "No timetable found for that regulation."
     except Exception as e:
         logger.error(f"Error in exam_timetable function: {e}")
+        msg = "Sorry, an error occurred while fetching the timetable."
+    for index, entry in enumerate(msg.split("\n\n")):
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text=f"\n{entry}"
+        )
+
+async def notification(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Starts the /notification flow by asking for Regulation."""
+    keyboard = [
+        [InlineKeyboardButton("R23", callback_data='R23')],
+        [InlineKeyboardButton("R20", callback_data='R20')],
+        [InlineKeyboardButton("R18", callback_data='R18')],
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text="Choose Regulation for Exam Timetable:",
+        reply_markup=reply_markup
+    )
+
+async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handles the button press from the /examtimetable flow."""
+    query = update.callback_query
+    await query.answer()
+    regulation = query.data
+    
+    try:
+        notice = notification_timetable(regulation)
+        msg = "\n\n".join(notice[:MAX_TIMETABLE_ENTRIES])
+        if not msg:
+             msg = "No timetable found for that regulation."
+    except Exception as e:
+        logger.error(f"Error in notification_timetable function: {e}")
         msg = "Sorry, an error occurred while fetching the timetable."
     for index, entry in enumerate(msg.split("\n\n")):
         await context.bot.send_message(
@@ -586,6 +621,8 @@ def main() -> None:
     # --- Add Simple Handlers ---
     application.add_handler(CommandHandler('start', start))
     application.add_handler(CommandHandler('examtimetable', examtimetable))
+    application.add_handler(CallbackQueryHandler(button, pattern=r"^(R23|R20|R18)$"))
+    application.add_handler(CommandHandler('notification', notification))
     
     application.add_handler(CallbackQueryHandler(button, pattern=r"^(R23|R20|R18)$"))
 
