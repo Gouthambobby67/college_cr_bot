@@ -31,6 +31,26 @@ def exam_timetable(regulation):
             b.append(downloadlink)
             n=n+1
     return b
+def notification_timetable(regulation):
+    html_text = requests.get("https://mits.ac.in/ugc-autonomous-exam-portal#ugc-pro1").text
+    soup = BeautifulSoup(html_text, 'lxml')
+    n=0
+    b=[]
+    table=soup.find('div', id='ugc-pro1')
+    exam=table.find('div',class_='container')
+    exam_data=exam.find("div",class_="publication-list mb-4")
+    exam1=exam.find_all("li")
+    for index,exam2 in enumerate(exam1):
+        if n==5:
+            break
+        a=exam2.text.strip()
+        downlink=exam2.find("a")['href']
+        downloadlink=safe_url(downlink)
+        if regulation in a:
+            b.append(a)
+            b.append(downloadlink)
+            n=n+1
+    return b
 class results_checking:
     def get_results_link(self,all_data_collected):
         html_text="http://125.16.54.154/mitsresults/resultug"
