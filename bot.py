@@ -1,5 +1,5 @@
 import logging
-from ExamTimeTable import results_checking, exam_timetable, notification_timetable
+from ExamTimeTable import results_checking, exam_timetable,notification_timetable
 from resutbot import result_bot
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -20,8 +20,7 @@ load_dotenv()
 
 # --- Configuration ---
 # Get token from environment variable, fallback to hardcoded (not recommended for production)
-TOKEN="ENTER YOUR TOKEN"
-# States for ConversationHandler
+TOKEN="ENTER THE TOKEN "# States for ConversationHandler
 (
     GET_REGULATION,  # Waiting for user to select regulation (R18, R20, R23)
     GET_YEAR,        # Waiting for user to select year (1, 2, 3, 4)
@@ -70,9 +69,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 async def examtimetable(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Starts the /examtimetable flow by asking for Regulation."""
     keyboard = [
-        [InlineKeyboardButton("R23", callback_data='R23')],
-        [InlineKeyboardButton("R20", callback_data='R20')],
-        [InlineKeyboardButton("R18", callback_data='R18')],
+        [InlineKeyboardButton("R23", callback_data='exam_R23')],
+        [InlineKeyboardButton("R20", callback_data='exam_R20')],
+        [InlineKeyboardButton("R18", callback_data='exam_R18')],    
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     await context.bot.send_message(
@@ -81,11 +80,11 @@ async def examtimetable(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         reply_markup=reply_markup
     )
 
-async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def exam_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handles the button press from the /examtimetable flow."""
     query = update.callback_query
     await query.answer()
-    regulation = query.data
+    regulation = query.data.replace("exam_", "")
     
     try:
         notice = exam_timetable(regulation)
@@ -100,41 +99,6 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             chat_id=update.effective_chat.id,
             text=f"\n{entry}"
         )
-
-async def notification(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Starts the /notification flow by asking for Regulation."""
-    keyboard = [
-        [InlineKeyboardButton("R23", callback_data='R23')],
-        [InlineKeyboardButton("R20", callback_data='R20')],
-        [InlineKeyboardButton("R18", callback_data='R18')],
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await context.bot.send_message(
-        chat_id=update.effective_chat.id,
-        text="Choose Regulation for Exam Timetable:",
-        reply_markup=reply_markup
-    )
-
-async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handles the button press from the /examtimetable flow."""
-    query = update.callback_query
-    await query.answer()
-    regulation = query.data
-    
-    try:
-        notice = notification_timetable(regulation)
-        msg = "\n\n".join(notice[:MAX_TIMETABLE_ENTRIES])
-        if not msg:
-             msg = "No timetable found for that regulation."
-    except Exception as e:
-        logger.error(f"Error in notification_timetable function: {e}")
-        msg = "Sorry, an error occurred while fetching the timetable."
-    for index, entry in enumerate(msg.split("\n\n")):
-        await context.bot.send_message(
-            chat_id=update.effective_chat.id,
-            text=f"\n{entry}"
-        )
-
 
 # --- 2. ConversationHandler for /resultscheck ---
 
@@ -578,6 +542,41 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     context.user_data.clear()
     return ConversationHandler.END
 
+# --- 3. Notification Timetable ---
+
+async def notification(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Starts the /notification flow by asking for Regulation."""
+    keyboard = [
+        [InlineKeyboardButton("R23", callback_data='notif_R23')],
+        [InlineKeyboardButton("R20", callback_data='notif_R20')],
+        [InlineKeyboardButton("R18", callback_data='notif_R18')],
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text="Choose Regulation for Notification Timetable:",
+        reply_markup=reply_markup
+    )
+
+async def notification_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handles the button press from the /notification flow."""
+    query = update.callback_query
+    await query.answer()
+    regulation = query.data.replace("notif_", "")
+
+    try:
+        notification = notification_timetable(regulation)
+        text = "\n\n".join(notification[:MAX_TIMETABLE_ENTRIES])
+        if not text:
+            text = "No timetable found for that regulation."
+    except Exception as e:
+        logger.error(f"Error in notification_timetable function: {e}")
+        text = "Sorry, an error occurred while fetching the timetable."
+    for index, entry in enumerate(text.split("\n\n")):
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text=f"\n{entry}"
+        )
 
 # --- 3. Main function to build and run the bot ---
 
@@ -621,10 +620,9 @@ def main() -> None:
     # --- Add Simple Handlers ---
     application.add_handler(CommandHandler('start', start))
     application.add_handler(CommandHandler('examtimetable', examtimetable))
-    application.add_handler(CallbackQueryHandler(button, pattern=r"^(R23|R20|R18)$"))
+    application.add_handler(CallbackQueryHandler(exam_button, pattern=r"^exam_(R23|R20|R18)$"))
     application.add_handler(CommandHandler('notification', notification))
-    
-    application.add_handler(CallbackQueryHandler(button, pattern=r"^(R23|R20|R18)$"))
+    application.add_handler(CallbackQueryHandler(notification_button, pattern=r"^notif_(R23|R20|R18)$"))
 
     print("Bot is running... Press Ctrl-C to stop.")
     application.run_polling()
