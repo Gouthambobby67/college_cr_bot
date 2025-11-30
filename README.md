@@ -1,6 +1,6 @@
 # MITS College Bot
 
-A Telegram bot built primarily for Madanapalle Institute of Technology and Sciences (MITS) that helps students quickly check their results and view timetables. This project was developed as part of the author's coursework and is intended to make accessing college information easier for students.
+A Telegram bot built primarily for Madanapalle Institute of Technology and Sciences (MITS) that helps students quickly check their results and view timetables. This project was developed as part of[...]  
 
 ---
 
@@ -8,6 +8,7 @@ A Telegram bot built primarily for Madanapalle Institute of Technology and Scien
 
 - Check exam results
 - View class timetables
+- Notification button
 - Quick access via Telegram username or QR code
 - Lightweight and easy to extend
 
@@ -71,4 +72,4 @@ This project is shared for educational purposes. If you want a formal license ad
 - Email: tharunvariamdugu@gmail.com
 - Repository owner / developer: tharunvarimadugu
 
-If you want me to add more details (example commands, deployment instructions, or include the actual QR image in the repo), tell me where you'd like the image placed (suggested path: `assets/mits_qr.png`) and I will update the README accordingly.
+If you want me to add more details (example commands, deployment instructions, or include the actual QR image in the repo), tell me where you'd like the image placed (suggested path: `assets/mits_qr.png`).
