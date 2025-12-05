@@ -20,7 +20,7 @@ load_dotenv()
 
 # --- Configuration ---
 # Get token from environment variable, fallback to hardcoded (not recommended for production)
-TOKEN="ENTER THE TOKEN "# States for ConversationHandler
+TOKEN=os.getenv("TOKEN")# States for ConversationHandler
 (
     GET_REGULATION,  # Waiting for user to select regulation (R18, R20, R23)
     GET_YEAR,        # Waiting for user to select year (1, 2, 3, 4)
