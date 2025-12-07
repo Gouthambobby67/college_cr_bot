@@ -12,7 +12,7 @@ def safe_url(u):
     path =  quote(parts[3])
     return f"{prefix}/{path}"
 def exam_timetable(regulation):
-    html_text = requests.get("https://mits.ac.in/ugc-autonomous-exam-portal#ugc-pro3").text
+    html_text = requests.get("https://mits.ac.in/ugc-autonomous-exam-portal#ugc-pro3", timeout=10).text
     soup = BeautifulSoup(html_text, 'lxml')
     n=0
     b=[]
@@ -32,7 +32,7 @@ def exam_timetable(regulation):
             n=n+1
     return b
 def notification_timetable(regulation):
-    html_text = requests.get("https://mits.ac.in/ugc-autonomous-exam-portal#ugc-pro1").text
+    html_text = requests.get("https://mits.ac.in/ugc-autonomous-exam-portal#ugc-pro1", timeout=10).text
     soup = BeautifulSoup(html_text, 'lxml')
     n=0
     b=[]
@@ -54,7 +54,7 @@ def notification_timetable(regulation):
 class results_checking:
     def get_results_link(self,all_data_collected):
         html_text="http://125.16.54.154/mitsresults/resultug"
-        soup=BeautifulSoup(requests.get(html_text).text,'lxml')
+        soup=BeautifulSoup(requests.get(html_text, timeout=10).text,'lxml')
         table=soup.find('div',class_='wrapper')
         table1=table.find_all('a')
         data=[]

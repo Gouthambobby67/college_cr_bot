@@ -22,7 +22,7 @@ class result_bot:
             url = all_data_collected[0]
             logger.info(f"Fetching URL: {url}")
             
-            response = requests.get(url, timeout=30)
+            response = requests.get(url, timeout=10)
             response.raise_for_status()
             
             soup = BeautifulSoup(response.text, 'lxml')
@@ -79,7 +79,7 @@ class result_bot:
             # Submit POST request
             # The form action is usually the same URL or relative. 
             # We'll post to the same URL as 'link' since the action was 'myresultug?resultid=...' which matches the link.
-            response = requests.post(link, data=payload, timeout=30)
+            response = requests.post(link, data=payload, timeout=10)
             response.raise_for_status()
             
             soup = BeautifulSoup(response.text, 'lxml')
