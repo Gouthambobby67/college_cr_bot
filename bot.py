@@ -580,23 +580,21 @@ async def notification_button(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 # --- 3. Main function to build and run the bot ---
 
-def main() -> None:
-    """Run the bot."""
-    
+def build_application() -> Application:
+    """Builds and returns a configured Application instance."""
     if TOKEN == "YOUR_BOT_TOKEN" or not TOKEN:
         logger.critical("="*50)
         logger.critical("ERROR: TOKEN is not set.")
-        logger.critical("Please replace 'YOUR_BOT_TOKEN' with your actual bot token.")
+        logger.critical("Please set the 'TOKEN' environment variable.")
         logger.critical("="*50)
-        return
-    
+        raise RuntimeError("Bot token not set")
+
     if a is None or b is None:
         logger.critical("Helper classes failed to initialize. Bot cannot start.")
-        return
+        raise RuntimeError("Helpers not initialized")
 
     application = Application.builder().token(TOKEN).build()
 
-    # --- Setup ConversationHandler for /resultscheck ---
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler("resultscheck", resultscheck)],
         states={
@@ -604,7 +602,6 @@ def main() -> None:
             GET_YEAR: [CallbackQueryHandler(get_year, pattern=r"^(1|2|3|4)$")],
             GET_SEM: [CallbackQueryHandler(get_sem, pattern=r"^(1|2)$")],
             GET_OPTION: [CallbackQueryHandler(get_option, pattern=r"^\d+$")],
-            # FIX 4: Added new handlers for department
             GET_DEPARTMENT: [CallbackQueryHandler(get_department, pattern="^dept_")],
             CONFIRM_DEPARTMENT: [CallbackQueryHandler(confirm_department, pattern="^confirm_dept_")],
             GET_ROLL: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_roll)],
@@ -614,19 +611,24 @@ def main() -> None:
         },
         fallbacks=[CommandHandler("cancel", cancel)],
     )
-    
-    application.add_handler(conv_handler)
 
-    # --- Add Simple Handlers ---
+    application.add_handler(conv_handler)
     application.add_handler(CommandHandler('start', start))
     application.add_handler(CommandHandler('examtimetable', examtimetable))
     application.add_handler(CallbackQueryHandler(exam_button, pattern=r"^exam_(R23|R20|R18)$"))
     application.add_handler(CommandHandler('notification', notification))
     application.add_handler(CallbackQueryHandler(notification_button, pattern=r"^notif_(R23|R20|R18)$"))
 
+    return application
+
+def main() -> None:
+    """Run the bot with long polling (local/dev)."""
+    try:
+        application = build_application()
+    except Exception:
+        return
     print("Bot is running... Press Ctrl-C to stop.")
     application.run_polling()
 
 if __name__ == "__main__":
     main()
-
